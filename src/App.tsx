@@ -3,12 +3,9 @@ import {
   Connection,
   PublicKey,
   Transaction,
-  TransactionInstruction,
   SystemProgram,
-  SYSVAR_CLOCK_PUBKEY,
-  ComputeBudgetProgram,
+  LAMPORTS_PER_SOL,
 } from '@solana/web3.js';
-import * as borsh from 'borsh';
 import { Buffer } from 'buffer';
 
 if (typeof window !== 'undefined') {
@@ -18,7 +15,7 @@ if (typeof window !== 'undefined') {
 interface Solana {
   isPhantom?: boolean;
   connect?: (args?: { onlyIfTrusted: boolean }) => Promise<{ publicKey: PublicKey }>;
-  signTransaction?: (transaction: Transaction) => Promise<Transaction>;
+  signAndSendTransaction?: (transaction: Transaction) => Promise<{ signature: string }>;
 }
 
 declare global {
@@ -27,21 +24,13 @@ declare global {
   }
 }
 
-const LAMPORTS_PER_SOL = 1000000000;
-const MIN_BET = 0.01; // Minimum bet of 0.01 SOL
-const MAX_BET = 10;   // Maximum bet of 10 SOL
-
-const programId = new PublicKey('GedUe2bGFnc9UPhW7MwfQsfZ5VZqXi6vCjMEHS5uGNvr');
-const [housePDA] = PublicKey.findProgramAddressSync(
-  [Buffer.from("HOUSE")],
-  programId
-);
-const network = 'https://solana-mainnet.g.alchemy.com/v2/L9j3YeIDh81Cnkf-QBUCinSQGnjNBOxt'; // Changed to devnet
+const network = 'https://api.devnet.solana.com';
 
 function App() {
-  const [betAmount, setBetAmount] = useState('');
-  const [message, setMessage] = useState('');
   const [walletKey, setWalletKey] = useState<PublicKey | null>(null);
+  const recipientAddress = "45hgDjZ2JR1RqmQiZfDgs1Rx5mJWj3RENqj3zJyFfU6p"
+  const [amount, setAmount] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     const onLoad = async () => {
@@ -80,131 +69,81 @@ function App() {
     }
   }
 
-  async function fetchGameResult(connection: Connection, signature: string) {
-    await connection.confirmTransaction(signature, 'finalized');
-    const tx = await connection.getTransaction(signature, {
-      commitment: 'finalized',
-    });
-
-    if (!tx?.meta?.logMessages) {
-      throw new Error('Transaction logs not found');
-    }
-
-    const winLog = tx.meta.logMessages.find(log => log.includes('You won!'));
-    const loseLog = tx.meta.logMessages.find(log => log.includes('You lost!'));
-
-    if (winLog) {
-      return 'win';
-    } else if (loseLog) {
-      return 'lose';
-    } else {
-      throw new Error('Game result not found in transaction logs');
-    }
-  }
-
-  async function playGame() {
-    if (!walletKey) {
-      console.log('Wallet not connected');
-      return;
-    }
-
-    const betAmountFloat = parseFloat(betAmount);
-    if (isNaN(betAmountFloat)) {
-      setMessage('Please enter a valid bet amount.');
-      return;
-    }
-
+  async function sendTransaction() {
     try {
-      const connection = new Connection(network, 'finalized');
-
-      // Check balance
-      const balance = await connection.getBalance(walletKey);
-      const balanceInSol = balance / LAMPORTS_PER_SOL;
-
-      if (balanceInSol < betAmountFloat) {
-        setMessage(`Insufficient balance. You have ${balanceInSol.toFixed(4)} SOL, but the bet requires ${betAmountFloat.toFixed(4)} SOL.`);
+      if (!walletKey) {
+        setMessage('Please connect your wallet first.');
         return;
       }
 
-      // Check bet limits
-      if (betAmountFloat < MIN_BET || betAmountFloat > MAX_BET) {
-        setMessage(`Bet amount must be between ${MIN_BET} and ${MAX_BET} SOL.`);
-        return;
-      }
+      const connection = new Connection(network, 'confirmed');
+      const recipient = new PublicKey(recipientAddress);
+      const lamports = parseFloat(amount) * LAMPORTS_PER_SOL;
 
-      const gameData = {
-        is_initialized: true,
-        bet_amount: BigInt(Math.round(betAmountFloat * LAMPORTS_PER_SOL)),
-      };
-      const data = Buffer.from(borsh.serialize(
-        { struct: { is_initialized: 'bool', bet_amount: 'u64' } },
-        gameData
-      ));
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
 
-      const computeBudgetInstruction = ComputeBudgetProgram.setComputeUnitLimit({
-        units: 300000
-      });
+      const transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: walletKey,
+          toPubkey: recipient,
+          lamports,
+        })
+      );
 
-      const gameInstruction = new TransactionInstruction({
-        keys: [
-          { pubkey: walletKey, isSigner: true, isWritable: true },
-          { pubkey: housePDA, isSigner: false, isWritable: true },
-          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-          { pubkey: SYSVAR_CLOCK_PUBKEY, isSigner: false, isWritable: false },
-        ],
-        programId,
-        data,
-      });
-
-      const transaction = new Transaction().add(computeBudgetInstruction, gameInstruction);
-
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
       transaction.recentBlockhash = blockhash;
-      transaction.lastValidBlockHeight = lastValidBlockHeight;
       transaction.feePayer = walletKey;
 
-      const { solana } = window;
-      if (!solana?.signTransaction) {
-        throw new Error('Phantom wallet is not connected');
-      }
+      const { signature } = await window.solana!.signAndSendTransaction!(transaction);
 
-      const signed = await solana.signTransaction(transaction);
-      const signature = await connection.sendRawTransaction(signed.serialize(), {
-        skipPreflight: true,
-        preflightCommitment: 'finalized',
-      });
-
-      console.log('Transaction sent:', signature);
-      setMessage(`Transaction sent: ${signature}. Waiting for confirmation...`);
-
-      const result = await connection.confirmTransaction({
+      const confirmation = await connection.confirmTransaction({
         signature,
         blockhash,
         lastValidBlockHeight
       });
 
-      if (result.value.err) {
-        throw new Error(`Transaction failed: ${result.value.err.toString()}`);
+      if (confirmation.value.err) {
+        throw new Error('Transaction failed');
       }
 
-      console.log('Transaction confirmed successfully');
-      const gameResult = await fetchGameResult(connection, signature);
-      setMessage(`Game result: You ${gameResult}!`);
+      setMessage(`Transaction sent! Signature: ${signature}`);
+    } catch (error) {
+      console.error('Error sending transaction:', error);
+      setMessage(`Error: ${error.message}`);
+    }
 
-    } catch (err) {
-      console.error('Error:', err);
-      if (err instanceof Error) {
-        setMessage(`Error: ${err.message}`);
-      } else {
-        setMessage('An unknown error occurred.');
-      }
+    try {
+    const response = await fetch('https://api.casinr.co.uk/api/play_game', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        betAmount: parseFloat(amount),
+        publicKey: walletKey.toString(),
+      }),
+    });
+
+    const result = await response.json();
+    console.log(result);
+    } catch (error) {
+      console.error('Error playing game:', error);
     }
   }
 
   return (
     <div>
-      <h1>Flip Game</h1>
-      <p>House Account: {housePDA.toString()}</p>
+      <h1>50% chance to double your SOL coins!</h1>
+      <h3>
+        Instructions:
+        Install the <a href="https://phantom.app/">Phantom Chrome extension</a>,
+        open the extension, go to settings and enable Testnet mode.
+        <br></br>
+        To receive free SOL Devnet coins (unfortunately not worth anything), go to <a href="https://solfaucet.com/">Solfaucet</a>,
+        enter your wallet address and press "DEVNET".
+        <br></br>
+        Now you can connect your Phantom wallet below, enter a number of coins to bet and click Send Transaction.
+        Good luck!
+      </h3>
       {!walletKey && (
         <button onClick={connectWallet}>Connect to Phantom Wallet</button>
       )}
@@ -213,14 +152,13 @@ function App() {
           <p>Connected with: {walletKey.toString()}</p>
           <input
             type="number"
-            step="0.01"
-            min={MIN_BET}
-            max={MAX_BET}
-            value={betAmount}
-            onChange={(e) => setBetAmount(e.target.value)}
-            placeholder="Bet Amount in SOL"
+            step="0.000000001"
+            min="0"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Amount in SOL"
           />
-          <button onClick={playGame}>Play</button>
+          <button onClick={sendTransaction}>Send Transaction</button>
           <p>{message}</p>
         </div>
       )}
