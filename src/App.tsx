@@ -45,9 +45,11 @@ function App() {
       const { solana } = window;
       if (solana?.isPhantom) {
         console.log('Phantom wallet found!');
-        const response = await solana.connect({ onlyIfTrusted: true });
-        console.log('Connected with Public Key:', response.publicKey.toString());
-        setWalletKey(response.publicKey);
+        if (solana.connect) {
+          const response = await solana.connect({ onlyIfTrusted: true });
+          console.log('Connected with Public Key:', response.publicKey.toString());
+          setWalletKey(response.publicKey);
+        }
       } else {
         console.log('Solana object not found! Get a Phantom Wallet 👻');
       }
@@ -59,7 +61,7 @@ function App() {
   async function connectWallet() {
     try {
       const { solana } = window;
-      if (solana) {
+      if (solana && solana.connect) {
         const response = await solana.connect();
         console.log('Connected with Public Key:', response.publicKey.toString());
         setWalletKey(response.publicKey);
@@ -80,20 +82,20 @@ function App() {
       const recipient = new PublicKey(recipientAddress);
       const lamports = parseFloat(amount) * LAMPORTS_PER_SOL;
 
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      const {blockhash, lastValidBlockHeight} = await connection.getLatestBlockhash();
 
       const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: walletKey,
-          toPubkey: recipient,
-          lamports,
-        })
+          SystemProgram.transfer({
+            fromPubkey: walletKey,
+            toPubkey: recipient,
+            lamports,
+          })
       );
 
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = walletKey;
 
-      const { signature } = await window.solana!.signAndSendTransaction!(transaction);
+      const {signature} = await window.solana!.signAndSendTransaction!(transaction);
 
       const confirmation = await connection.confirmTransaction({
         signature,
@@ -108,25 +110,27 @@ function App() {
       setMessage(`Transaction sent! Signature: ${signature}`);
     } catch (error) {
       console.error('Error sending transaction:', error);
-      setMessage(`Error: ${error.message}`);
+      setMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    try {
-    const response = await fetch('https://api.casinr.co.uk/api/play_game', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        betAmount: parseFloat(amount),
-        publicKey: walletKey.toString(),
-      }),
-    });
+    if (walletKey) {
+      try {
+        const response = await fetch('https://api.casinr.co.uk/api/play_game', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            betAmount: parseFloat(amount),
+            publicKey: walletKey.toString(),
+          }),
+        });
 
-    const result = await response.json();
-    console.log(result);
-    } catch (error) {
-      console.error('Error playing game:', error);
+        const result = await response.json();
+        console.log(result);
+      } catch (error) {
+        console.error('Error playing game:', error);
+      }
     }
   }
 
