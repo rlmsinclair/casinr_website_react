@@ -24,7 +24,7 @@ declare global {
   }
 }
 
-const network = 'https://api.mainnet-beta.solana.com';
+const network = 'https://quaint-newest-snowflake.solana-mainnet.quiknode.pro/6efa683091a868f50d6c8d3a6bea48556683a2d9/';
 
 function App() {
   const [walletKey, setWalletKey] = useState<PublicKey | null>(null);
