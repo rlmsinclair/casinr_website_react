@@ -136,7 +136,7 @@ function App() {
 
   return (
     <div>
-      <h1>50% chance to double your SOL coins!</h1>
+      <h1>Double or Nothing</h1>
       <h3>
         Instructions:
         Install the <a href="https://phantom.app/">Phantom Chrome extension</a>
