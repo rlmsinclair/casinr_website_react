@@ -139,13 +139,12 @@ function App() {
       <h1>50% chance to double your SOL coins!</h1>
       <h3>
         Instructions:
-        Install the <a href="https://phantom.app/">Phantom Chrome extension</a>,
-        open the extension, go to settings and enable Testnet mode.
+        Install the <a href="https://phantom.app/">Phantom Chrome extension</a>
         <br></br>
-        To receive free SOL Devnet coins (unfortunately not worth anything), go to <a href="https://solfaucet.com/">Solfaucet</a>,
-        enter your wallet address and press "DEVNET".
+        Buy some SOL.
         <br></br>
         Now you can connect your Phantom wallet below, enter a number of coins to bet and click Send Transaction.
+        <br></br>
         Good luck!
       </h3>
       {!walletKey && (
