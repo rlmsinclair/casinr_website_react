@@ -24,7 +24,7 @@ declare global {
   }
 }
 
-const network = 'https://api.devnet.solana.com';
+const network = 'https://api.mainnet-beta.solana.com';
 
 function App() {
   const [walletKey, setWalletKey] = useState<PublicKey | null>(null);
@@ -108,10 +108,6 @@ function App() {
       }
 
       setMessage(`Transaction sent! Signature: ${signature}`);
-    } catch (error) {
-      console.error('Error sending transaction:', error);
-      setMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
-    }
 
     if (walletKey) {
       try {
@@ -131,6 +127,10 @@ function App() {
       } catch (error) {
         console.error('Error playing game:', error);
       }
+    }
+    } catch (error) {
+      console.error('Error sending transaction:', error);
+      setMessage(`Error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
